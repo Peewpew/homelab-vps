@@ -1,0 +1,85 @@
+name: Feature Branch CI - Immich
+
+on:
+  push:
+    branches-ignore:
+      - main
+      - develop
+
+jobs:
+  validate:
+    name: Validate & Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout the repo
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Lint Dockerfiles in immich-app
+      - name: Lint Dockerfiles
+        run: |
+          if [ -f immich-app/Dockerfile ]; then
+            curl -sL https://github.com/hadolint/hadolint/releases/download/v2.8.0/hadolint-Linux-x86_64 -o /usr/local/bin/hadolint
+            chmod +x /usr/local/bin/hadolint
+            hadolint immich-app/Dockerfile
+          else
+            echo "No Dockerfile found in immich-app — skipping lint"
+          fi
+
+      # Validate docker-compose
+      - name: Validate docker-compose
+        run: |
+          if [ -f immich-app/docker-compose.yml ]; then
+            docker-compose -f immich-app/docker-compose.yml config
+          else
+            echo "No docker-compose.yml found — skipping validation"
+          fi
+
+      # Lint bash scripts
+      - name: Lint bash scripts
+        run: |
+          if [ -d scripts ]; then
+            find scripts/ -name "*.sh" -exec bash -n {} \;
+          else
+            echo "No scripts directory — skipping lint"
+          fi
+
+  build-test:
+    name: Build & Test Docker
+    runs-on: ubuntu-latest
+    needs: validate
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Build Immich Docker images
+      - name: Build Docker Images
+        run: |
+          if [ -f immich-app/docker-compose.yml ]; then
+            docker-compose -f immich-app/docker-compose.yml build --parallel
+          else
+            echo "No docker-compose.yml — skipping build"
+          fi
+
+      # Start Immich containers in detached mode
+      - name: Start Docker Containers
+        run: |
+          docker-compose -f immich-app/docker-compose.yml up -d
+
+      # Wait a few seconds for containers to be ready
+      - name: Wait for Services
+        run: sleep 10
+
+      # Basic smoke test: check Immich server container status
+      - name: Smoke Test Immich Server
+        run: |
+          STATUS=$(docker inspect -f '{{.State.Running}}' immich_server || echo "false")
+          if [ "$STATUS" != "true" ]; then
+            echo "❌ immich_server is not running!"
+            docker-compose -f immich-app/docker-compose.yml logs
+            exit 1
+          else
+            echo "✅ immich_server is running"
+          fi
