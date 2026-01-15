@@ -31,7 +31,7 @@ jobs:
       - name: Validate docker-compose
         run: |
           if [ -f immich-app/docker-compose.yml ]; then
-            docker-compose -f immich-app/docker-compose.yml config
+            docker compose -f immich-app/docker-compose.yml config
           else
             echo "No docker-compose.yml found — skipping validation"
           fi
@@ -58,7 +58,7 @@ jobs:
       - name: Build Docker Images
         run: |
           if [ -f immich-app/docker-compose.yml ]; then
-            docker-compose -f immich-app/docker-compose.yml build --parallel
+            docker compose -f immich-app/docker-compose.yml build --parallel
           else
             echo "No docker-compose.yml — skipping build"
           fi
@@ -66,7 +66,7 @@ jobs:
       # Start Immich containers in detached mode
       - name: Start Docker Containers
         run: |
-          docker-compose -f immich-app/docker-compose.yml up -d
+          docker compose -f immich-app/docker-compose.yml up -d
 
       # Wait a few seconds for containers to be ready
       - name: Wait for Services
@@ -78,7 +78,7 @@ jobs:
           STATUS=$(docker inspect -f '{{.State.Running}}' immich_server || echo "false")
           if [ "$STATUS" != "true" ]; then
             echo "❌ immich_server is not running!"
-            docker-compose -f immich-app/docker-compose.yml logs
+            docker compose -f immich-app/docker-compose.yml logs
             exit 1
           else
             echo "✅ immich_server is running"
