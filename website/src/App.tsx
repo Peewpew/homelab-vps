@@ -4,92 +4,175 @@
  */
 
 import { useEffect, useState } from 'react';
-import { CaseStudy } from './data/portfolioContent';
-import { DEFAULT_HOST_CONFIG, HostConfig } from './utils/devopsGenerators';
-import { TopBar } from './components/TopBar';
-import { HeroSection } from './components/HeroSection';
-import { ProjectsSection } from './components/ProjectsSection';
-import { RepoCleanupWorkbench } from './components/RepoCleanupWorkbench';
-import { VpsRunbookSection } from './components/VpsRunbookSection';
-import { PipelineSimulator } from './components/PipelineSimulator';
-import { HostConfigModal } from './components/HostConfigModal';
-import { CaseStudyModal } from './components/CaseStudyModal';
+import {
+  CvProfileState,
+  DEFAULT_CV_PROFILE,
+  UploadedCvPdf,
+} from './utils/cvProfile';
+import { PortfolioPage, TopBar } from './components/TopBar';
+import { HomePage } from './components/HomePage';
+import { CvPage } from './components/CvPage';
+import { TechStackPage } from './components/TechStackPage';
+import { EditIntroModal } from './components/EditIntroModal';
 
-const HOST_STORAGE_KEY = 'nobleops_host_config_v1';
+const CV_PROFILE_STORAGE_KEY = 'nobleops_cv_profile_v1';
+const CV_PDF_STORAGE_KEY = 'nobleops_cv_pdf_v1';
+
+function readPageFromHash(): PortfolioPage {
+  if (typeof window === 'undefined') return 'home';
+  const hash = window.location.hash.replace('#', '').toLowerCase();
+  if (hash === 'cv') return 'cv';
+  if (hash === 'stack' || hash === 'tech-stack') return 'stack';
+  return 'home';
+}
 
 export default function App() {
-  const [hostConfig, setHostConfig] = useState<HostConfig>(() => {
+  const [activePage, setActivePage] = useState<PortfolioPage>(readPageFromHash);
+  const [isIntroModalOpen, setIsIntroModalOpen] = useState(false);
+
+  const [profile, setProfile] = useState<CvProfileState>(() => {
     try {
-      const saved = window.localStorage.getItem(HOST_STORAGE_KEY);
-      return saved ? { ...DEFAULT_HOST_CONFIG, ...(JSON.parse(saved) as Partial<HostConfig>) } : DEFAULT_HOST_CONFIG;
+      const saved = window.localStorage.getItem(CV_PROFILE_STORAGE_KEY);
+      return saved
+        ? { ...DEFAULT_CV_PROFILE, ...(JSON.parse(saved) as Partial<CvProfileState>) }
+        : DEFAULT_CV_PROFILE;
     } catch {
-      return DEFAULT_HOST_CONFIG;
+      return DEFAULT_CV_PROFILE;
     }
   });
 
-  const [isHostModalOpen, setIsHostModalOpen] = useState(false);
-  const [selectedCaseStudy, setSelectedCaseStudy] = useState<CaseStudy | null>(null);
+  const [cvPdf, setCvPdf] = useState<UploadedCvPdf | null>(() => {
+    try {
+      const saved = window.localStorage.getItem(CV_PDF_STORAGE_KEY);
+      return saved ? (JSON.parse(saved) as UploadedCvPdf) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    const onHashChange = () => {
+      setActivePage(readPageFromHash());
+    };
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(HOST_STORAGE_KEY, JSON.stringify(hostConfig));
+      window.localStorage.setItem(CV_PROFILE_STORAGE_KEY, JSON.stringify(profile));
     } catch {
-      // Ignore storage failures
+      // Ignore storage quota errors
     }
-  }, [hostConfig]);
+  }, [profile]);
+
+  const handleNavigate = (page: PortfolioPage) => {
+    setActivePage(page);
+    window.history.replaceState(null, '', `#${page}`);
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  };
+
+  const handleSetCvPdf = (nextPdf: UploadedCvPdf | null): boolean => {
+    setCvPdf(nextPdf);
+    try {
+      if (nextPdf) {
+        window.localStorage.setItem(CV_PDF_STORAGE_KEY, JSON.stringify(nextPdf));
+      } else {
+        window.localStorage.removeItem(CV_PDF_STORAGE_KEY);
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-zinc-50 text-zinc-950">
-      <TopBar onOpenHostModal={() => setIsHostModalOpen(true)} />
+      <TopBar
+        brandName={profile.fullName}
+        activePage={activePage}
+        linkedinUrl={profile.linkedinUrl}
+        onNavigate={handleNavigate}
+      />
 
       <main className="flex-1">
-        <HeroSection
-          config={hostConfig}
-          onOpenHostModal={() => setIsHostModalOpen(true)}
-        />
-        <ProjectsSection onSelectCaseStudy={(study) => setSelectedCaseStudy(study)} />
-        <RepoCleanupWorkbench config={hostConfig} />
-        <VpsRunbookSection config={hostConfig} />
-        <PipelineSimulator config={hostConfig} />
+        {activePage === 'home' && (
+          <HomePage
+            profile={profile}
+            hasUploadedCv={Boolean(cvPdf)}
+            onNavigate={handleNavigate}
+            onEditIntro={() => setIsIntroModalOpen(true)}
+          />
+        )}
+
+        {activePage === 'cv' && (
+          <CvPage
+            profile={profile}
+            cvPdf={cvPdf}
+            onUpdateProfile={setProfile}
+            onSetCvPdf={handleSetCvPdf}
+          />
+        )}
+
+        {activePage === 'stack' && <TechStackPage />}
       </main>
 
-      <footer className="border-t border-zinc-200 bg-zinc-50 py-10">
+      <footer className="border-t border-zinc-200 bg-white py-8">
         <div className="max-w-[1200px] mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs text-zinc-500">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-medium text-zinc-800">{hostConfig.engineerName}</span>
+            <span className="font-medium text-zinc-900">{profile.fullName}</span>
             <span aria-hidden="true">·</span>
-            <span>Contabo Ubuntu 24.04.5 LTS (Noble)</span>
-            <span aria-hidden="true">·</span>
-            <span className="font-mono">{hostConfig.domain}</span>
+            <span>{profile.headline}</span>
           </div>
+
           <div className="flex items-center gap-6">
-            <a href="#projects" className="hover:text-zinc-900">
-              Projects
+            <a
+              href="#home"
+              onClick={(e) => {
+                e.preventDefault();
+                handleNavigate('home');
+              }}
+              className="hover:text-zinc-900"
+            >
+              Home
             </a>
-            <a href="#cleanup" className="hover:text-zinc-900">
-              Repo Cleanup
+            <a
+              href="#cv"
+              onClick={(e) => {
+                e.preventDefault();
+                handleNavigate('cv');
+              }}
+              className="hover:text-zinc-900"
+            >
+              CV
             </a>
-            <a href="#runbook" className="hover:text-zinc-900">
-              VSCode &amp; VPS
+            <a
+              href="#stack"
+              onClick={(e) => {
+                e.preventDefault();
+                handleNavigate('stack');
+              }}
+              className="hover:text-zinc-900"
+            >
+              Tech Stack
             </a>
-            <a href="#pipeline" className="hover:text-zinc-900">
-              Pipeline
+            <a
+              href={profile.linkedinUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-zinc-900"
+            >
+              LinkedIn
             </a>
           </div>
         </div>
       </footer>
 
-      <HostConfigModal
-        isOpen={isHostModalOpen}
-        config={hostConfig}
-        onSave={(next) => setHostConfig(next)}
-        onClose={() => setIsHostModalOpen(false)}
-      />
-
-      <CaseStudyModal
-        study={selectedCaseStudy}
-        config={hostConfig}
-        onClose={() => setSelectedCaseStudy(null)}
+      <EditIntroModal
+        isOpen={isIntroModalOpen}
+        profile={profile}
+        onSave={(updates) => setProfile((prev) => ({ ...prev, ...updates }))}
+        onClose={() => setIsIntroModalOpen(false)}
       />
     </div>
   );
