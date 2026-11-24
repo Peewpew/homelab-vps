@@ -1,10 +1,9 @@
 export const MAX_CV_PDF_BYTES = Math.floor(3.5 * 1024 * 1024);
 
-export interface UploadedCvPdf {
+export interface UploadedPdfMeta {
   fileName: string;
   sizeBytes: number;
   uploadedAt: string;
-  dataUrl: string;
 }
 
 export interface CuratedGithubRepo {
@@ -24,7 +23,7 @@ export interface CvProfileState {
   repos: CuratedGithubRepo[];
 }
 
-export const DEFAULT_CV_PROFILE: CvProfileState = {
+export const PORTFOLIO_PROFILE: CvProfileState = {
   fullName: 'Peewpew',
   headline: 'Junior DevOps & Cloud Infrastructure Engineer',
   location: 'Europe · Remote / Hybrid',
@@ -109,11 +108,31 @@ export function validatePdfFileMeta(file: {
   if (file.size > MAX_CV_PDF_BYTES) {
     return {
       valid: false,
-      error: `PDF exceeds the ${formatFileSize(MAX_CV_PDF_BYTES)} browser storage limit. Compress the file or place it in website/public/cv.pdf.`,
+      error: `PDF exceeds the ${formatFileSize(MAX_CV_PDF_BYTES)} upload limit.`,
     };
   }
 
   return { valid: true };
+}
+
+export function isPdfMagicHeader(bytes: Uint8Array): boolean {
+  if (bytes.length < 5) return false;
+  return (
+    bytes[0] === 0x25 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x44 &&
+    bytes[3] === 0x46 &&
+    bytes[4] === 0x2d
+  );
+}
+
+export function isSafeHttpUrl(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl.trim());
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 export function normalizeLinkedinUrl(rawUrl: string): {
@@ -189,4 +208,9 @@ export function parseGithubRepoInput(input: {
       description: desc || 'Selected GitHub repository',
     },
   };
+}
+
+export function isPdfContentType(contentType: string | null): boolean {
+  if (!contentType) return false;
+  return contentType.toLowerCase().includes('application/pdf');
 }

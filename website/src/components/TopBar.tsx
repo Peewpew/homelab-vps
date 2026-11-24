@@ -5,7 +5,7 @@ export type PortfolioPage = 'home' | 'cv' | 'stack';
 
 interface TopBarProps {
   brandName: string;
-  activePage: PortfolioPage;
+  activePage: PortfolioPage | 'owner';
   linkedinUrl: string;
   onNavigate: (page: PortfolioPage) => void;
 }

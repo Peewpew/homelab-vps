@@ -1,4 +1,4 @@
-import { ArrowRight, ExternalLink, FileText, Layers, Pencil } from 'lucide-react';
+import { ArrowRight, ExternalLink, FileText, Layers } from 'lucide-react';
 import { CvProfileState } from '../utils/cvProfile';
 import { HERO_WORKSPACE_IMAGE } from '../data/techStackContent';
 import { PortfolioPage } from './TopBar';
@@ -6,12 +6,10 @@ import { ResilientImage } from './ResilientImage';
 
 interface HomePageProps {
   profile: CvProfileState;
-  hasUploadedCv: boolean;
   onNavigate: (page: PortfolioPage) => void;
-  onEditIntro: () => void;
 }
 
-export function HomePage({ profile, hasUploadedCv, onNavigate, onEditIntro }: HomePageProps) {
+export function HomePage({ profile, onNavigate }: HomePageProps) {
   return (
     <div>
       {/* Hero Introduction */}
@@ -24,15 +22,6 @@ export function HomePage({ profile, hasUploadedCv, onNavigate, onEditIntro }: Ho
                   <span>{profile.location}</span>
                   <span aria-hidden="true">·</span>
                   <span className="text-blue-600">{profile.availability}</span>
-                  <span aria-hidden="true">·</span>
-                  <button
-                    type="button"
-                    onClick={onEditIntro}
-                    className="inline-flex items-center gap-1 text-zinc-600 hover:text-zinc-950 hover:underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 rounded-sm"
-                  >
-                    <Pencil className="w-3 h-3" />
-                    <span>Edit Intro</span>
-                  </button>
                 </div>
 
                 <h1 className="font-display text-4xl sm:text-5xl font-bold tracking-tight text-zinc-950 leading-[1.08] [text-wrap:balance]">
@@ -51,7 +40,7 @@ export function HomePage({ profile, hasUploadedCv, onNavigate, onEditIntro }: Ho
                   className="inline-flex items-center gap-2 px-5 py-3 text-sm font-medium text-white bg-zinc-950 hover:bg-zinc-800 rounded-lg transition-colors whitespace-nowrap shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
                 >
                   <FileText className="w-4 h-4" />
-                  <span>{hasUploadedCv ? 'View CV & PDF' : 'View CV & Links'}</span>
+                  <span>View CV &amp; Links</span>
                 </button>
 
                 <button
@@ -112,7 +101,7 @@ export function HomePage({ profile, hasUploadedCv, onNavigate, onEditIntro }: Ho
         </div>
       </section>
 
-      {/* Selected Repositories & Quick Navigation */}
+      {/* Selected Repositories */}
       <section className="py-14 lg:py-16 bg-zinc-50">
         <div className="max-w-[1200px] mx-auto px-4 sm:px-6 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
@@ -128,36 +117,30 @@ export function HomePage({ profile, hasUploadedCv, onNavigate, onEditIntro }: Ho
               onClick={() => onNavigate('cv')}
               className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-zinc-700 hover:text-zinc-950 hover:underline underline-offset-4 whitespace-nowrap shrink-0 self-start sm:self-auto"
             >
-              <span>Manage links &amp; CV PDF</span>
+              <span>See full CV &amp; links</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
 
-          {profile.repos.length === 0 ? (
-            <div className="bg-white border border-zinc-200 rounded-2xl p-6 text-sm text-zinc-600">
-              No featured repositories added yet. Add GitHub repositories on the CV page.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {profile.repos.map((repo) => (
-                <a
-                  key={repo.id}
-                  href={repo.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group bg-white border border-zinc-200 hover:border-zinc-300 rounded-2xl p-6 flex flex-col justify-between gap-3 transition-colors"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="font-mono text-sm font-semibold text-zinc-950 group-hover:text-blue-600 truncate">
-                      {repo.label}
-                    </span>
-                    <ExternalLink className="w-4 h-4 text-zinc-400 group-hover:text-blue-600 shrink-0" />
-                  </div>
-                  <p className="text-sm text-zinc-600 leading-relaxed">{repo.description}</p>
-                </a>
-              ))}
-            </div>
-          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {profile.repos.map((repo) => (
+              <a
+                key={repo.id}
+                href={repo.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group bg-white border border-zinc-200 hover:border-zinc-300 rounded-2xl p-6 flex flex-col justify-between gap-3 transition-colors"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span className="font-mono text-sm font-semibold text-zinc-950 group-hover:text-blue-600 truncate">
+                    {repo.label}
+                  </span>
+                  <ExternalLink className="w-4 h-4 text-zinc-400 group-hover:text-blue-600 shrink-0" />
+                </div>
+                <p className="text-sm text-zinc-600 leading-relaxed">{repo.description}</p>
+              </a>
+            ))}
+          </div>
         </div>
       </section>
     </div>

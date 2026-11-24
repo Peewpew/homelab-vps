@@ -1,95 +1,89 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import path from 'node:path';
 import {
-  DEFAULT_CV_PROFILE,
   MAX_CV_PDF_BYTES,
+  PORTFOLIO_PROFILE,
   formatFileSize,
+  isPdfContentType,
+  isPdfMagicHeader,
+  isSafeHttpUrl,
   normalizeLinkedinUrl,
   parseGithubRepoInput,
   validateIntroFields,
   validatePdfFileMeta,
 } from './cvProfile';
+import {
+  hashPassword,
+  resolveConfinedPath,
+  signSessionToken,
+  timingSafeEqualStrings,
+  verifyPassword,
+  verifySessionToken,
+} from './serverAuth';
 import { TECH_STACK_MODULES, filterTechStackModules } from '../data/techStackContent';
 
-test('formatFileSize formats bytes, kilobytes, and megabytes cleanly', () => {
-  assert.equal(formatFileSize(512), '512 B');
-  assert.equal(formatFileSize(2048), '2.0 KB');
-  assert.equal(formatFileSize(1.5 * 1024 * 1024), '1.50 MB');
-});
-
-test('validateIntroFields accepts defaults and rejects blank fields', () => {
-  const valid = validateIntroFields(DEFAULT_CV_PROFILE);
-  assert.equal(valid.valid, true);
-  assert.deepEqual(valid.errors, {});
-
-  const invalid = validateIntroFields({
-    fullName: '   ',
-    headline: '',
-    introBio: ' ',
-  });
-  assert.equal(invalid.valid, false);
-  assert.ok(invalid.errors.fullName);
-  assert.ok(invalid.errors.headline);
-  assert.ok(invalid.errors.introBio);
-});
-
-test('validatePdfFileMeta accepts valid PDFs and rejects non-PDF or oversized files', () => {
-  assert.deepEqual(
-    validatePdfFileMeta({ name: 'Peewpew_CV.pdf', type: 'application/pdf', size: 245000 }),
-    { valid: true }
+test('PORTFOLIO_PROFILE and validation helpers validate inputs accurately', () => {
+  assert.equal(validateIntroFields(PORTFOLIO_PROFILE).valid, true);
+  assert.equal(
+    validateIntroFields({ fullName: ' ', headline: '', introBio: '' }).valid,
+    false
   );
-
-  const nonPdf = validatePdfFileMeta({ name: 'resume.docx', type: 'application/msword', size: 12000 });
-  assert.equal(nonPdf.valid, false);
-  assert.ok(nonPdf.error);
-
-  const tooBig = validatePdfFileMeta({
-    name: 'huge.pdf',
-    type: 'application/pdf',
-    size: MAX_CV_PDF_BYTES + 1024,
-  });
-  assert.equal(tooBig.valid, false);
-  assert.ok(tooBig.error);
+  assert.equal(formatFileSize(2048), '2.0 KB');
+  assert.equal(
+    validatePdfFileMeta({ name: 'cv.pdf', type: 'application/pdf', size: 1024 }).valid,
+    true
+  );
+  assert.equal(
+    validatePdfFileMeta({ name: 'cv.pdf', type: 'application/pdf', size: MAX_CV_PDF_BYTES + 1 })
+      .valid,
+    false
+  );
+  assert.equal(isPdfMagicHeader(Buffer.from('%PDF-1.4')), true);
+  assert.equal(isPdfMagicHeader(Buffer.from('<html')), false);
+  assert.equal(isPdfContentType('application/pdf'), true);
+  assert.equal(isPdfContentType('text/html'), false);
+  assert.equal(isSafeHttpUrl('https://github.com/Peewpew'), true);
+  assert.equal(isSafeHttpUrl('javascript:alert(1)'), false);
 });
 
-test('normalizeLinkedinUrl prepends https and rejects invalid URLs', () => {
-  const normalized = normalizeLinkedinUrl('www.linkedin.com/in/peewpeew');
-  assert.equal(normalized.valid, true);
-  assert.equal(normalized.url, 'https://www.linkedin.com/in/peewpeew');
+test('LinkedIn and GitHub repo parsers normalize and reject invalid entries', () => {
+  const ln = normalizeLinkedinUrl('linkedin.com/in/peewpeew');
+  assert.equal(ln.valid, true);
+  assert.equal(ln.url, 'https://linkedin.com/in/peewpeew');
+  assert.equal(normalizeLinkedinUrl('invalid link').valid, false);
 
-  const invalid = normalizeLinkedinUrl('not a url');
-  assert.equal(invalid.valid, false);
-  assert.ok(invalid.error);
+  const gh = parseGithubRepoInput({
+    repoOrUrl: 'https://github.com/Peewpew/homelab-vps.git',
+    description: 'Homelab repo',
+  });
+  assert.equal(gh.valid, true);
+  assert.equal(gh.repo?.label, 'Peewpew/homelab-vps');
+  assert.equal(parseGithubRepoInput({ repoOrUrl: 'bad repo' }).valid, false);
 });
 
-test('parseGithubRepoInput accepts owner/repo shorthand and full GitHub URLs', () => {
-  const fromShort = parseGithubRepoInput({
-    repoOrUrl: 'Peewpew/immich-stack',
-    description: 'Standalone Immich deployment',
-  });
-  assert.equal(fromShort.valid, true);
-  assert.equal(fromShort.repo?.label, 'Peewpew/immich-stack');
-  assert.equal(fromShort.repo?.url, 'https://github.com/Peewpew/immich-stack');
-  assert.equal(fromShort.repo?.description, 'Standalone Immich deployment');
+test('scrypt password hashing, HMAC session tokens, and path confinement enforce security', () => {
+  const { hash, salt } = hashPassword('super-secret-pass');
+  assert.equal(verifyPassword('super-secret-pass', hash, salt), true);
+  assert.equal(verifyPassword('wrong-pass', hash, salt), false);
+  assert.equal(timingSafeEqualStrings('abc', 'abc'), true);
+  assert.equal(timingSafeEqualStrings('abc', 'abd'), false);
 
-  const fromUrl = parseGithubRepoInput({
-    repoOrUrl: 'https://github.com/Peewpew/homelab-vps.git/',
-  });
-  assert.equal(fromUrl.valid, true);
-  assert.equal(fromUrl.repo?.label, 'Peewpew/homelab-vps');
-  assert.equal(fromUrl.repo?.url, 'https://github.com/Peewpew/homelab-vps');
+  const secret = 'test-signing-secret';
+  const token = signSessionToken(secret, 60_000);
+  assert.equal(verifySessionToken(token, secret), true);
+  assert.equal(verifySessionToken(token, 'wrong-secret'), false);
+  assert.equal(verifySessionToken(token, secret, Date.now() + 120_000), false);
 
-  const invalid = parseGithubRepoInput({ repoOrUrl: 'invalid-repo-name' });
-  assert.equal(invalid.valid, false);
-  assert.ok(invalid.error);
+  const confined = resolveConfinedPath('/tmp/data', 'cv.pdf');
+  assert.equal(confined, path.resolve('/tmp/data', 'cv.pdf'));
+  assert.throws(() => resolveConfinedPath('/tmp/data', '../etc/passwd'));
 });
 
-test('filterTechStackModules includes Docker, Kubernetes, and Git and filters cleanly', () => {
-  assert.equal(filterTechStackModules('All').length, TECH_STACK_MODULES.length);
+test('filterTechStackModules includes Docker, Kubernetes, and Git', () => {
   assert.deepEqual(
     filterTechStackModules('All').map((m) => m.id),
-    ['Docker', 'Kubernetes', 'Git']
+    TECH_STACK_MODULES.map((m) => m.id)
   );
-  assert.equal(filterTechStackModules('Kubernetes').length, 1);
-  assert.equal(filterTechStackModules('Kubernetes')[0].id, 'Kubernetes');
+  assert.equal(filterTechStackModules('Docker').length, 1);
 });

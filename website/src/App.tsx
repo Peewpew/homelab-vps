@@ -6,49 +6,32 @@
 import { useEffect, useState } from 'react';
 import {
   CvProfileState,
-  DEFAULT_CV_PROFILE,
-  UploadedCvPdf,
+  PORTFOLIO_PROFILE,
+  UploadedPdfMeta,
 } from './utils/cvProfile';
 import { PortfolioPage, TopBar } from './components/TopBar';
 import { HomePage } from './components/HomePage';
 import { CvPage } from './components/CvPage';
 import { TechStackPage } from './components/TechStackPage';
-import { EditIntroModal } from './components/EditIntroModal';
+import { OwnerPage } from './components/OwnerPage';
 
-const CV_PROFILE_STORAGE_KEY = 'nobleops_cv_profile_v1';
-const CV_PDF_STORAGE_KEY = 'nobleops_cv_pdf_v1';
+type AppPage = PortfolioPage | 'owner';
 
-function readPageFromHash(): PortfolioPage {
+function readPageFromHash(): AppPage {
   if (typeof window === 'undefined') return 'home';
   const hash = window.location.hash.replace('#', '').toLowerCase();
   if (hash === 'cv') return 'cv';
   if (hash === 'stack' || hash === 'tech-stack') return 'stack';
+  if (hash === 'owner') return 'owner';
   return 'home';
 }
 
 export default function App() {
-  const [activePage, setActivePage] = useState<PortfolioPage>(readPageFromHash);
-  const [isIntroModalOpen, setIsIntroModalOpen] = useState(false);
-
-  const [profile, setProfile] = useState<CvProfileState>(() => {
-    try {
-      const saved = window.localStorage.getItem(CV_PROFILE_STORAGE_KEY);
-      return saved
-        ? { ...DEFAULT_CV_PROFILE, ...(JSON.parse(saved) as Partial<CvProfileState>) }
-        : DEFAULT_CV_PROFILE;
-    } catch {
-      return DEFAULT_CV_PROFILE;
-    }
-  });
-
-  const [cvPdf, setCvPdf] = useState<UploadedCvPdf | null>(() => {
-    try {
-      const saved = window.localStorage.getItem(CV_PDF_STORAGE_KEY);
-      return saved ? (JSON.parse(saved) as UploadedCvPdf) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [activePage, setActivePage] = useState<AppPage>(readPageFromHash);
+  const [profile, setProfile] = useState<CvProfileState>(PORTFOLIO_PROFILE);
+  const [pdfMeta, setPdfMeta] = useState<UploadedPdfMeta | null>(null);
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [setupRequired, setSetupRequired] = useState(false);
 
   useEffect(() => {
     const onHashChange = () => {
@@ -59,31 +42,42 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem(CV_PROFILE_STORAGE_KEY, JSON.stringify(profile));
-    } catch {
-      // Ignore storage quota errors
-    }
-  }, [profile]);
+    let active = true;
 
-  const handleNavigate = (page: PortfolioPage) => {
+    fetch('/api/profile')
+      .then((res) => (res.ok ? res.json() : null))
+      .then(
+        (
+          data: { profile?: CvProfileState; pdfMeta?: UploadedPdfMeta | null } | null
+        ) => {
+          if (!active || !data) return;
+          if (data.profile) setProfile(data.profile);
+          setPdfMeta(data.pdfMeta ?? null);
+        }
+      )
+      .catch(() => {
+        // Keep bundled fallback profile if server is unreachable
+      });
+
+    fetch('/api/auth/status')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { setupRequired?: boolean } | null) => {
+        if (!active || !data) return;
+        setSetupRequired(Boolean(data.setupRequired));
+      })
+      .catch(() => {
+        // Ignore auth status errors on initial public render
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleNavigate = (page: AppPage) => {
     setActivePage(page);
     window.history.replaceState(null, '', `#${page}`);
     window.scrollTo({ top: 0, behavior: 'auto' });
-  };
-
-  const handleSetCvPdf = (nextPdf: UploadedCvPdf | null): boolean => {
-    setCvPdf(nextPdf);
-    try {
-      if (nextPdf) {
-        window.localStorage.setItem(CV_PDF_STORAGE_KEY, JSON.stringify(nextPdf));
-      } else {
-        window.localStorage.removeItem(CV_PDF_STORAGE_KEY);
-      }
-      return true;
-    } catch {
-      return false;
-    }
   };
 
   return (
@@ -97,24 +91,29 @@ export default function App() {
 
       <main className="flex-1">
         {activePage === 'home' && (
-          <HomePage
-            profile={profile}
-            hasUploadedCv={Boolean(cvPdf)}
-            onNavigate={handleNavigate}
-            onEditIntro={() => setIsIntroModalOpen(true)}
-          />
+          <HomePage profile={profile} onNavigate={handleNavigate} />
         )}
 
-        {activePage === 'cv' && (
-          <CvPage
-            profile={profile}
-            cvPdf={cvPdf}
-            onUpdateProfile={setProfile}
-            onSetCvPdf={handleSetCvPdf}
-          />
-        )}
+        {activePage === 'cv' && <CvPage profile={profile} pdfMeta={pdfMeta} />}
 
         {activePage === 'stack' && <TechStackPage />}
+
+        {activePage === 'owner' && (
+          <OwnerPage
+            profile={profile}
+            pdfMeta={pdfMeta}
+            authToken={authToken}
+            setupRequired={setupRequired}
+            onAuthSuccess={(token) => {
+              setAuthToken(token);
+              setSetupRequired(false);
+            }}
+            onSignOut={() => setAuthToken(null)}
+            onProfileUpdated={setProfile}
+            onPdfUpdated={setPdfMeta}
+            onNavigate={handleNavigate}
+          />
+        )}
       </main>
 
       <footer className="border-t border-zinc-200 bg-white py-8">
@@ -125,7 +124,7 @@ export default function App() {
             <span>{profile.headline}</span>
           </div>
 
-          <div className="flex items-center gap-6">
+          <div className="flex flex-wrap items-center gap-6">
             <a
               href="#home"
               onClick={(e) => {
@@ -164,16 +163,19 @@ export default function App() {
             >
               LinkedIn
             </a>
+            <a
+              href="#owner"
+              onClick={(e) => {
+                e.preventDefault();
+                handleNavigate('owner');
+              }}
+              className="text-zinc-400 hover:text-zinc-900"
+            >
+              Owner Access
+            </a>
           </div>
         </div>
       </footer>
-
-      <EditIntroModal
-        isOpen={isIntroModalOpen}
-        profile={profile}
-        onSave={(updates) => setProfile((prev) => ({ ...prev, ...updates }))}
-        onClose={() => setIsIntroModalOpen(false)}
-      />
     </div>
   );
 }
