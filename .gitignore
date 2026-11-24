@@ -5,6 +5,10 @@
 # Database dumps
 *.sql
 
+# Immich & database runtime data
+immich/library/
+immich/postgres/
+
 # Backup data
 backups/
 data/
@@ -15,3 +19,4 @@ node_modules/
 
 # VS Code settings
 .vscode/
+
