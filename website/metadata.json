@@ -1,0 +1,6 @@
+{
+  "name": "NobleOps — DevOps Portfolio & Contabo VPS Workbench",
+  "description": "DevOps engineering portfolio and interactive Contabo Ubuntu 24.04.5 LTS, VSCode Remote-SSH, and GitHub repository cleanup workbench.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
